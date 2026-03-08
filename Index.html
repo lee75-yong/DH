@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>导航站</title>
+<style>
+body{
+  margin:0; font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+  display:flex; height:100vh; background:#f4f6f8;
+}
+.dark body{background:#111827; color:white;}
+.sidebar{
+  width:220px; background:#1f2937; color:white; display:flex; flex-direction:column; overflow-y:auto;
+}
+.sidebar h2{margin:15px; font-size:18px;}
+.cat-item{
+  padding:10px 15px; cursor:grab; border-left:4px solid transparent; user-select:none; display:flex; justify-content:space-between; align-items:center;
+}
+.cat-item.active{border-left:4px solid #3b82f6; background:#374151;}
+.cat-title{flex:1;}
+.main{flex:1; padding:20px; overflow-y:auto;}
+.topbar{display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; margin-bottom:20px;}
+.topbar input{padding:6px 10px; border-radius:6px; border:1px solid #ccc; flex:1; min-width:150px;}
+.topbar button{padding:6px 12px; margin-left:5px; border:none; border-radius:6px; background:#3b82f6; color:white; cursor:pointer; margin-top:5px;}
+.links{
+  display:grid;
+  grid-template-columns: repeat(auto-fill,minmax(180px,1fr));
+  gap:12px;
+}
+.card{background:white; padding:10px; border-radius:10px; box-shadow:0 3px 10px rgba(0,0,0,0.05); display:flex; align-items:center; justify-content:space-between; cursor:grab;}
+.dark .card{background:#1f2937;}
+.card a{display:flex; align-items:center; text-decoration:none; color:#333; flex:1;}
+.card img{width:20px; height:20px; margin-right:8px;}
+.delete{color:red; cursor:pointer;}
+.addBox{background:white; padding:10px; border-radius:8px; margin-bottom:15px; box-shadow:0 2px 6px rgba(0,0,0,0.05);}
+.dark .addBox{background:#1f2937;}
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+<h2>分类导航</h2>
+<div id="categories"></div>
+<button onclick="toggleDark()" style="margin:10px;">深色模式</button>
+</div>
+
+<div class="main">
+<div class="topbar">
+<input placeholder="搜索网站..." oninput="searchSite(this.value)" id="searchInput">
+<button onclick="showAddBox()">添加网址</button>
+<button onclick="exportData()">导出 JSON</button>
+<button onclick="importData()">导入 JSON</button>
+<button onclick="importHTML()">导入浏览器书签</button>
+</div>
+
+<div id="addBox" class="addBox" style="display:none;">
+<h3>添加网址</h3>
+<input id="cat" placeholder="分类">
+<input id="name" placeholder="网站名称">
+<input id="url" placeholder="https://">
+<button onclick="addLink()">添加</button>
+<button onclick="cancelAdd()">取消</button>
+</div>
+
+<div id="nav" class="links"></div>
+</div>
+
+<script>
+let data = JSON.parse(localStorage.getItem("navData")||"{}");
+let currentCat = null;
+let expandedCats = {}; // 保存折叠状态
+
+// 渲染分类列表
+function renderCats(){
+  const catsDiv = document.getElementById("categories");
+  catsDiv.innerHTML="";
+  Object.keys(data).forEach((cat,index)=>{
+    let div = document.createElement("div");
+    div.className="cat-item"+(cat===currentCat?" active":"");
+    div.dataset.index=index;
+    
+    // 左侧分类拖拽
+    div.draggable=true;
+    div.ondragstart=e=>{e.dataTransfer.setData("text/plain", index); div.style.opacity=0.5;}
+    div.ondragend=e=>{div.style.opacity=1;}
+    div.ondragover=e=>e.preventDefault();
+    div.ondrop=e=>{
+      e.preventDefault();
+      const fromIndex = parseInt(e.dataTransfer.getData("text/plain"));
+      const toIndex = parseInt(div.dataset.index);
+      if(fromIndex===toIndex) return;
+      const keys = Object.keys(data);
+      const temp = keys[fromIndex];
+      keys.splice(fromIndex,1);
+      keys.splice(toIndex,0,temp);
+      const newData = {};
+      keys.forEach(k=>{newData[k]=data[k];});
+      data = newData;
+      localStorage.setItem("navData",JSON.stringify(data));
+      render();
+      renderCats();
+    };
+    
+    // 分类名和折叠按钮
+    let titleSpan = document.createElement("span");
+    titleSpan.className="cat-title";
+    titleSpan.innerText=cat;
+    titleSpan.onclick=()=>{expandedCats[cat]=!expandedCats[cat]; render(); renderCats();}
+    
+    let arrowSpan = document.createElement("span");
+    arrowSpan.innerText = expandedCats[cat]?"▼":"▶";
+    arrowSpan.style.marginLeft="5px";
+    arrowSpan.onclick=()=>{expandedCats[cat]=!expandedCats[cat]; render(); renderCats();}
+    
+    div.appendChild(titleSpan);
+    div.appendChild(arrowSpan);
+    
+    catsDiv.appendChild(div);
+  });
+}
+
+// 渲染网站列表
+function render(){
+  const nav = document.getElementById("nav");
+  nav.innerHTML="";
+  if(!currentCat && Object.keys(data).length>0) currentCat=Object.keys(data)[0];
+  if(!currentCat) return;
+  
+  Object.keys(data).forEach(cat=>{
+    if(expandedCats[cat]){
+      data[cat].forEach((link,i)=>{
+        let icon="https://www.google.com/s2/favicons?domain="+link.url;
+        let div=document.createElement("div");
+        div.className="card";
+        div.draggable=true;
+        div.dataset.index=i;
+        div.dataset.cat = cat;
+        div.innerHTML=`<a href="${link.url}" target="_blank"><img src="${icon}">${link.name}</a><span class="delete" onclick="del('${cat}',${i})">✖</span>`;
+        nav.appendChild(div);
+      });
+    }
+  });
+  addCardDrag();
+  renderCats();
+}
+
+// 网站拖拽
+function addCardDrag(){
+  const cards = document.querySelectorAll(".card");
+  let dragSrcIndex=null;
+  let dragSrcCat=null;
+  cards.forEach(card=>{
+    card.ondragstart=e=>{
+      dragSrcIndex=parseInt(card.dataset.index);
+      dragSrcCat = card.dataset.cat;
+      card.style.opacity=0.5;
+    }
+    card.ondragend=e=>{card.style.opacity=1;}
+    card.ondragover=e=>e.preventDefault();
+    card.ondrop=e=>{
+      e.preventDefault();
+      let targetIndex = parseInt(card.dataset.index);
+      let targetCat = card.dataset.cat;
+      if(dragSrcIndex===targetIndex && dragSrcCat===targetCat) return;
+      const arr = data[dragSrcCat];
+      const moved = arr.splice(dragSrcIndex,1)[0];
+      data[targetCat].splice(targetIndex,0,moved);
+      localStorage.setItem("navData",JSON.stringify(data));
+      render();
+    }
+  });
+}
+
+// 添加网址
+function addLink(){
+  let cat=document.getElementById("cat").value;
+  let name=document.getElementById("name").value;
+  let url=document.getElementById("url").value;
+  if(!cat||!name||!url){alert("请填写完整");return;}
+  if(!data[cat]) data[cat]=[];
+  data[cat].push({name,url});
+  expandedCats[cat]=true;
+  localStorage.setItem("navData",JSON.stringify(data));
+  document.getElementById("addBox").style.display="none";
+  currentCat=cat;
+  render();
+}
+
+// 删除网址
+function del(cat,i){
+  data[cat].splice(i,1);
+  if(data[cat].length===0) delete data[cat];
+  localStorage.setItem("navData",JSON.stringify(data));
+  render();
+}
+
+// 搜索
+function searchSite(word){
+  word=word.toLowerCase();
+  const cards=document.querySelectorAll(".card");
+  cards.forEach(c=>{
+    if(c.innerText.toLowerCase().includes(word)) c.style.display="flex";
+    else c.style.display="none";
+  })
+}
+
+// 显示/取消添加框
+function showAddBox(){document.getElementById("addBox").style.display="block";}
+function cancelAdd(){document.getElementById("addBox").style.display="none";}
+
+// 深色模式
+function toggleDark(){document.body.classList.toggle("dark");}
+
+// JSON 导出/导入
+function exportData(){
+  const a=document.createElement("a");
+  a.href="data:text/json;charset=utf-8,"+encodeURIComponent(JSON.stringify(data));
+  a.download="navData.json"; a.click();
+}
+function importData(){
+  const input=document.createElement("input");
+  input.type="file"; input.accept=".json";
+  input.onchange=e=>{
+    const file=e.target.files[0];
+    const reader=new FileReader();
+    reader.onload=()=>{data=JSON.parse(reader.result); localStorage.setItem("navData",JSON.stringify(data)); render();}
+    reader.readAsText(file);
+  }
+  input.click();
+}
+
+// 浏览器书签 HTML 导入
+function importHTML(){
+  const input=document.createElement("input");
+  input.type="file"; input.accept=".html";
+  input.onchange=e=>{
+    const file=e.target.files[0];
+    const reader=new FileReader();
+    reader.onload=()=>{
+      parseBookmarksHTML(reader.result);
+      localStorage.setItem("navData",JSON.stringify(data));
+      render();
+      alert("书签导入完成！");
+    }
+    reader.readAsText(file);
+  }
+  input.click();
+}
+
+// 解析书签 HTML
+function parseBookmarksHTML(html){
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html,"text/html");
+  const h3s = doc.querySelectorAll("h3"); // 分类
+  h3s.forEach(h3=>{
+    const cat = h3.innerText.trim();
+    if(!data[cat]) data[cat]=[];
+    let sibling = h3.nextElementSibling;
+    if(sibling && sibling.tagName.toLowerCase()==="dl"){
+      const links = sibling.querySelectorAll("a");
+      links.forEach(a=>{
+        let name=a.innerText.trim();
+        let url=a.getAttribute("href");
+        if(url) data[cat].push({name,url});
+      })
+    }
+  });
+}
+
+// 初始渲染
+render();
+</script>
+
+</body>
+</html>
