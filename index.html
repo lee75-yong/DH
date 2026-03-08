@@ -1,24 +1,16 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html>
 <head>
 <meta charset="UTF-8">
-<title>我的导航</title>
+<title>导航</title>
 
 <style>
 
 body{
 font-family:-apple-system,BlinkMacSystemFont;
 background:#f5f6f7;
-margin:0;
 padding:30px;
 }
-
-h1{
-font-size:22px;
-margin-bottom:20px;
-}
-
-/* 卡片网格 */
 
 .links{
 display:grid;
@@ -26,12 +18,10 @@ grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
 gap:16px;
 }
 
-/* 卡片 */
-
 .card{
 background:white;
-border-radius:12px;
 padding:14px;
+border-radius:12px;
 box-shadow:0 2px 6px rgba(0,0,0,0.05);
 transition:0.2s;
 }
@@ -47,50 +37,18 @@ text-decoration:none;
 color:#333;
 }
 
-/* 图标 */
-
 .icon img{
-width:32px;
-height:32px;
+width:30px;
 margin-right:12px;
 }
 
-/* 内容 */
-
-.info{
-display:flex;
-flex-direction:column;
-}
-
 .title{
-font-size:15px;
 font-weight:600;
-margin-bottom:4px;
 }
 
 .desc{
 font-size:13px;
 color:#999;
-}
-
-/* 管理按钮 */
-
-.admin-panel{
-margin-bottom:20px;
-}
-
-button{
-padding:6px 10px;
-border:none;
-background:#3b82f6;
-color:white;
-border-radius:6px;
-cursor:pointer;
-}
-
-input{
-padding:6px;
-margin-right:6px;
 }
 
 </style>
@@ -99,70 +57,44 @@ margin-right:6px;
 
 <body>
 
-<h1>我的导航</h1>
-
-<div class="admin-panel">
-
-<button onclick="adminLogin()">管理员登录</button>
-
-<span id="adminTools" style="display:none">
-
-<input id="name" placeholder="网站名称">
-
-<input id="url" placeholder="网址">
-
-<input id="desc" placeholder="说明">
-
-<button onclick="addSite()">添加</button>
-
-</span>
-
-</div>
+<h2>导航</h2>
 
 <div class="links" id="nav"></div>
 
 <script>
 
-const ADMIN_PASSWORD="123456"
+let data=[]
 
-let isAdmin=false
-
-let data=JSON.parse(localStorage.getItem("navData")||`[
-{"name":"小众软件","url":"https://www.appinn.com","desc":"在这里发现更多有趣的应用"},
-{"name":"Producthunt","url":"https://producthunt.com","desc":"发现新鲜有趣的产品"},
-{"name":"Github","url":"https://github.com","desc":"全球最大的代码托管平台"}
-]`)
-
-function save(){
-localStorage.setItem("navData",JSON.stringify(data))
-}
+fetch("sites.json")
+.then(res=>res.json())
+.then(res=>{
+data=res
+render()
+})
 
 function render(){
 
 const nav=document.getElementById("nav")
-nav.innerHTML=""
 
-data.forEach((site,i)=>{
+data.forEach(site=>{
 
 const div=document.createElement("div")
 
 div.className="card"
 
 div.innerHTML=`
-
 <a href="${site.url}" target="_blank">
 
 <div class="icon">
 <img src="https://logo.clearbit.com/${new URL(site.url).hostname}">
 </div>
 
-<div class="info">
+<div>
 <div class="title">${site.name}</div>
-<div class="desc">${site.desc||""}</div>
+<div class="desc">${site.desc}</div>
 </div>
 
 </a>
-
 `
 
 nav.appendChild(div)
@@ -170,44 +102,6 @@ nav.appendChild(div)
 })
 
 }
-
-function addSite(){
-
-if(!isAdmin)return
-
-const name=document.getElementById("name").value
-const url=document.getElementById("url").value
-const desc=document.getElementById("desc").value
-
-data.push({name,url,desc})
-
-save()
-
-render()
-
-}
-
-function adminLogin(){
-
-const pwd=prompt("输入管理员密码")
-
-if(pwd===ADMIN_PASSWORD){
-
-isAdmin=true
-
-document.getElementById("adminTools").style.display="inline"
-
-alert("管理员模式开启")
-
-}else{
-
-alert("密码错误")
-
-}
-
-}
-
-render()
 
 </script>
 
